@@ -1,0 +1,48 @@
+#lang eopl
+
+(define scanner-spec-1
+	'((white-sp   (whitespace)                       skip)
+	  (comment    ("%" (arbno (not #\newline)))      skip)
+         (identifier (letter (arbno (or letter digit))) symbol)
+         (number     (digit (arbno digit))              number)))
+
+(define grammar-1
+	'((statement
+		("{" statement ";" statement "}")
+		compound-statement)
+	   (statement
+		("while" expression "do" statement)
+              while-statement)
+          (statement
+              (identifier ":=" expression)
+              assign-statement)
+          (expression
+              (identifier)
+              var-exp)
+          (expression
+              ("(" expression "-" expression ")")
+              diff-exp)))
+
+(sllgen:make-define-datatypes scanner-spec-1 grammar-1)
+
+(define list-the-datatypes
+	(lambda ()
+		(sllgen:list-define-datatypes scanner-spec-1 grammar-1)))
+
+(define just-scan
+	(sllgen:make-string-scanner scanner-spec-1 grammar-1))
+
+(define scan&parse
+	(sllgen:make-string-parser scanner-spec-1 grammar-1))
+
+;(define read-eval-print
+;	(sllgen:make-rep-loop "-->" value-of-program
+;		(sllgen:make-stream-parser scanner-spec-1 grammar-1)))
+
+(write "-- Hello Anney ! --")
+
+;; -- test lex -----------------------------------------------------------
+(define lexer (sllgen:make-string-scanner scanner-spec-1 '()))
+(lexer "foo bar 10 % this is a comment")
+
+;(scan&parse "a:=b")
