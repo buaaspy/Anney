@@ -56,16 +56,16 @@
      (number)
      const-exp)
     (expression
-     ("+" "(" expression "," expression ")")
+     ("+" "(" (separated-list expression ",")  ")")
      plus-exp)
     (expression
-     ("-" "(" expression "," expression ")")
+     ("-" "(" (separated-list expression ",") ")")
      diff-exp)    
     (expression
-     ("*" "(" expression "," expression ")")
+     ("*" "(" (separated-list expression ",") ")")
      times-exp)
     (expression
-     ("/" "(" expression "," expression ")")
+     ("/" "(" (separated-list expression ",") ")")
      divide-exp)
     (expression
      ("zero?" "(" expression ")")
@@ -115,6 +115,34 @@
       (bool-val (bool) bool)
       (else (write ">> expected bool <<")))))
 
+(define list-plus
+  (lambda (lst env)
+    (if (null? lst)
+        (num-val 0)
+        (num-val (+ (expval->num (value-of (car lst) env)) (expval->num (list-plus (cdr lst) env)))))))
+
+(define list-diff
+  (lambda (lst env)
+    (if (null? lst)
+        (num-val 0)
+        (let* ([fst (car lst)]
+               [fst-num (expval->num (value-of fst env))])
+          (num-val (- fst-num (expval->num (list-plus (cdr lst) env))))))))
+
+(define list-times
+  (lambda (lst env)
+    (if (null? lst)
+        (num-val 1)
+        (num-val (* (expval->num (value-of (car lst) env)) (expval->num (list-times (cdr lst) env)))))))
+
+(define list-divide
+  (lambda (lst env)
+    (if (null? lst)
+        (num-val 1)
+        (let* ([fst (car lst)]
+               [fst-num (expval->num (value-of fst env))])
+          (num-val (/ fst-num (expval->num (list-times (cdr lst) env))))))))
+
 ;; interpreter;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define run 
@@ -129,38 +157,33 @@
 (define value-of
   (lambda (exp env)
     (cases expression exp
+      ;; exp := num
       (const-exp (num) (num-val num))
 
+      ;; exp := identifier
       (var-exp (var) (apply-env env var))
 
-      (plus-exp (exp1 exp2)
-       (let ([val1 (value-of exp1 env)]
-             [val2 (value-of exp2 env)])
-         (let ((num1 (expval->num val1))
-           (num2 (expval->num val2)))
-         (num-val (+ num1 num2)))))      
+      ;; exp := + (exp {, exp})
+      (plus-exp (arg-list)                
+       (list-plus arg-list env))      
       
-      (diff-exp (exp1 exp2)
-       (let ([val1 (value-of exp1 env)]
-             [val2 (value-of exp2 env)])
-         (let ((num1 (expval->num val1))
-           (num2 (expval->num val2)))
-         (num-val (- num1 num2)))))
+      ;; exp := - (exp {, exp})      
+      (diff-exp (arg-list)
+       (if (null? arg-list)
+           (write ">> empty diff-exp <<")
+           (list-diff arg-list env)))
       
-      (times-exp (exp1 exp2)
-       (let ([val1 (value-of exp1 env)]
-             [val2 (value-of exp2 env)])
-         (let ((num1 (expval->num val1))
-           (num2 (expval->num val2)))
-         (num-val (* num1 num2)))))
+      ;; exp := * (exp {, exp})      
+      (times-exp (arg-list)
+       (list-times arg-list env))
       
-      (divide-exp (exp1 exp2)
-       (let ([val1 (value-of exp1 env)]
-             [val2 (value-of exp2 env)])
-         (let ((num1 (expval->num val1))
-           (num2 (expval->num val2)))
-         (num-val (/ num1 num2)))))
-    
+      ;; exp := / (exp {, exp})      
+      (divide-exp (arg-list)
+       (if (null? arg-list)
+           (write ">> empty divide-exp <<")
+           (list-divide arg-list env)))
+      
+      ;; exp := zero? exp
       (zero?-exp (exp1)
        (let ([val1 (value-of exp1 env)]) 
          (let ([num1 (expval->num val1)]) 
@@ -168,12 +191,14 @@
                (bool-val #t)
                (bool-val #f)))))
       
+      ;; exp := if exp then else exp
       (if-exp (exp1 exp2 exp3) 
        (let ([val1 (value-of exp1 env)]) 
          (if (expval->bool val1) 
              (value-of exp2 env) 
              (value-of exp3 env))))
       
+      ;; exp := let identifier = exp in body
       (let-exp (var exp1 body) 
        (let ([val1 (value-of exp1 env)]) 
          (value-of body (extend-env var val1 env)))))))
@@ -193,4 +218,22 @@
                in let y = 2
                  in let y = let x = -(x, 1) in -(x, y)
                    in -(-(x, 8), y)")
-;(scan&parse stmt1)
+
+(define stmt2 "- (1, 2, +(3, 4, *(5, 6, 7)))")
+
+(define stmt3 "- (1, 2)")
+
+(define stmt4 "- (1, 2, 3, 4)")
+
+(define stmt5 "+ (1, 2, +(3, 4, *(5, 6, 7), /(12, 2, 3)))")
+
+(define stmt6 "let x = 1
+               in let y = 2
+                 in let z = 3
+                   in let w = 4
+                     in +(x, * (y, z, w))")
+(define stmt7 "/(12, 2, 3)")
+(define stmt8 "/()")
+(define stmt9 "*()")
+(define stmt10 "+()")
+(define stmt11 "-()")
