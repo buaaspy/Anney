@@ -237,3 +237,6 @@
 (define stmt9 "*()")
 (define stmt10 "+()")
 (define stmt11 "-()")
+(define stmt12 "let x = 1
+                in let y = 1
+                  in if zero? (-(x, y)) then +(x, y) else -(x, y)")
