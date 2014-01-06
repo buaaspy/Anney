@@ -3,32 +3,40 @@
 ;; env ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define empty-env
-	(lambda () (list 'empty-env)))
+  (lambda ()
+    '()))
 
 (define extend-env
-	(lambda (var val env)
- 		(list 'extend-env var val env)))
+  (lambda (saved-sym saved-val saved-env)
+    (cond
+      ((not (symbol? saved-sym))
+       (write ">> expected symbol <<"))
+      ((not (expval? saved-val))
+       (write ">> expected value <<"))
+      ((not (environment? saved-env))
+       (write ">> expected environment <<"))
+      (else
+       (cons (list saved-sym saved-val) saved-env)))))
+
+(define environment?
+  (lambda (x)
+    (or (null? x)
+        (and (pair? x)
+             (list? (car x))
+             (= 2 (length (car x)))
+             (symbol? (car (car x)))
+             (expval? (car (cdr (car x))))
+             (environment? (cdr x))))))
 
 (define apply-env
-	(lambda (env search-var)
-		(cond 
-			[(eq? (car env) 'empty-env) (report-no-bindings-found 'x)]
-			[(eq? (car env) 'extend-env) 
-				(let ([saved-var (cadr env)]
-				      [saved-val (caddr env)]
-				      [saved-env (cadddr env)]) 
-					(if (eq? search-var saved-var)
-						saved-val
-						(apply-env saved-env search-var)))]
-			[else (report-invalid-env env)])))
-
-(define report-no-bindings-found
-	(lambda (search-var)
-		(write "no binding found")))
-
-(define report-invalid-env
-	(lambda (env)
-		(write "bad environment")))
+  (lambda (env sym)
+    (cond 
+      ((null? env)
+       (write ">> expected symbol <<"))
+      ((eq? sym (car (car env)))
+       (car (cdr (car env))))
+      (else
+       (apply-env (cdr env) sym)))))
 
 (define init-env
   (lambda ()
@@ -78,7 +86,13 @@
      var-exp)
     (expression
      ("let" identifier "=" expression "in" expression)
-     let-exp)))
+     let-exp)
+    (expression
+     ("proc" "(" identifier ")" expression)
+     proc-exp)
+    (expression
+     ("(" expression expression ")")
+     call-exp)))
 
 (sllgen:make-define-datatypes scanner-let grammar-let)
 
@@ -95,13 +109,29 @@
 (define show-the-datatypes
   (lambda () (sllgen:show-define-datatypes scanner-let grammar-let)))
 
+;; proc ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define-datatype proc proc?
+  (procedure
+   (var symbol?)
+   (exp expression?)
+   (env environment?)))
+
+(define apply-procedure
+  (lambda (proc1 val)
+    (cases proc proc1
+      (procedure (var body saved-env)
+                 (value-of body (extend-env var val saved-env))))))
+
 ;; scaffold  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define-datatype expval expval?
   (num-val
    (num number?))
   (bool-val
-   (bool boolean?)))
+   (bool boolean?))
+  (proc-val
+   (proc proc?)))
 
 (define expval->num
   (lambda (val)
@@ -114,6 +144,12 @@
     (cases expval val
       (bool-val (bool) bool)
       (else (write ">> expected bool <<")))))
+
+(define expval->proc
+  (lambda (val)
+    (cases expval val
+      (proc-val (p) p)
+      (else (write ">> expected proc <<")))))
 
 (define list-plus
   (lambda (lst env)
@@ -201,7 +237,16 @@
       ;; exp := let identifier = exp in body
       (let-exp (var exp1 body) 
        (let ([val1 (value-of exp1 env)]) 
-         (value-of body (extend-env var val1 env)))))))
+         (value-of body (extend-env var val1 env))))
+      
+      ;; exp := proc ( identifier ) exp
+      (proc-exp (var exp) 
+                (proc-val (procedure var exp env)))
+      
+      ;; exp := ( proc para )
+      (call-exp (rator rand)
+                (let ([p (expval->proc (value-of rator env))])
+                  (apply-procedure p (value-of rand env)))))))
 
 (write "-- Hello Anney ! --")
 
@@ -209,7 +254,7 @@
 (define lexer (sllgen:make-string-scanner scanner-let grammar-let))
 ;(lexer "foo bar 10 % this is a comment")
 
-;; -- test grammer -------------------------------------------------------
+;; -- test ---------------------------------------------------------------
 (define stmt0 "let x = 9
                in let y = 1
                  in +(x, y)")
@@ -240,3 +285,9 @@
 (define stmt12 "let x = 1
                 in let y = 1
                   in if zero? (-(x, y)) then +(x, y) else -(x, y)")
+
+(define stmt13 "let x = 200
+                in let f = proc (z) -(z,x)
+                  in let x = 100
+                    in let g = proc (z) -(z, x)
+                      in -((f 1), (g 1))")
